@@ -59,3 +59,32 @@ mvn -pl irctc-web-service dependency:tree \
 grep -n -E 'Caused by:|APPLICATION FAILED|Description:|Error creating bean|Exception' \
   irctc-web-service/target/surefire-reports/*.txt
 ```
+
+
+
+#### To control browsers: consuming application can override just the necessary properties
+
+```sh
+# To use a visible browser
+
+playwright:
+  browser:
+    mode: LAUNCH
+    headless: false
+
+# To attach to an existing browser:
+
+playwright:
+  browser:
+    mode: ATTACHED
+    host: 127.0.0.1
+    port: 9222
+
+# To use a custom executable:
+
+playwright:
+  browser:
+    mode: LAUNCH
+    headless: false
+    executable-path: "/path/to/browser-executable"
+```

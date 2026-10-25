@@ -1,10 +1,5 @@
 package com.achhecode.playwright.capture;
 
-import org.springframework.stereotype.Component;
-
-import com.achhecode.playwright.config.PlaywrightAttachProperties;
-
-import tools.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -14,16 +9,22 @@ import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import org.springframework.stereotype.Component;
+
+import com.achhecode.playwright.config.PlaywrightCaptureProperties;
+
+import tools.jackson.databind.ObjectMapper;
+
 @Component
 public class CaptureStorage {
 
     private final ObjectMapper objectMapper;
     private final Path capturesDirectory;
 
-    public CaptureStorage(ObjectMapper objectMapper, PlaywrightAttachProperties properties) {
+    public CaptureStorage(ObjectMapper objectMapper, PlaywrightCaptureProperties properties) {
         this.objectMapper = objectMapper;
 
-        this.capturesDirectory = Path.of(properties.getCapture().getDir());
+        this.capturesDirectory = Path.of(properties.getDir());
     }
 
     public Path save(BrowserPageCapture.CapturedPage page) throws IOException {

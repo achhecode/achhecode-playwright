@@ -2,52 +2,25 @@ spring:
   application:
     name: achhecode-playwright
 
-
 logging:
   file:
     name: ./logs/playwright-core.log
-
   level:
     root: INFO
-    com.achhecode.irctcwebservice: INFO
-
-  pattern:
-    console: "%d{HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"
-    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{50} - %msg%n"
-
-  logback:
-    rollingpolicy:
-      file-name-pattern: ./logs/irctc-web.%d{yyyy-MM-dd}.%i.log.gz
-      max-file-size: 50MB
-      total-size-cap: 1GB
-      max-history: 30
-      clean-history-on-start: true
-
-
-springdoc:
-  api-docs:
-    enabled: true
-    path: /v3/api-docs
-
-  swagger-ui:
-    enabled: true
-    path: /swagger-ui.html
+    com.achhecode.playwright: INFO
 
 playwright:
-
   capture:
     dir: ./captures
-    
-  attach:
+
+  browser:
+    mode: HEADLESS
+    headless: true
+    eager-connect: true
     host: 127.0.0.1
     port: 9222
     connect-timeout-ms: 10000
     default-timeout-ms: 30000
     navigation-timeout-ms: 60000
-    eager-connect: true
-    # --- needed only for POST /api/playwright/restart ---
-    chrome-path: testing-browser/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing
-    user-data-dir: testing-browser/browser-data
     startup-timeout-ms: 15000
-    chrome-args: []
-
+    args: []

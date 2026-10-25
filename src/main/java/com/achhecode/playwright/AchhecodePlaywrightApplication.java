@@ -5,11 +5,12 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.ComponentScan;
 
-import com.achhecode.playwright.config.PlaywrightAttachProperties;
+import com.achhecode.playwright.config.PlaywrightBrowserProperties;
+import com.achhecode.playwright.config.PlaywrightCaptureProperties;
 
 @SpringBootApplication
 @ComponentScan(basePackages = "com.achhecode.playwrightcore")
-@EnableConfigurationProperties(PlaywrightAttachProperties.class)
+@EnableConfigurationProperties({ PlaywrightBrowserProperties.class, PlaywrightCaptureProperties.class })
 public class AchhecodePlaywrightApplication {
 
 	public static void main(String[] args) {

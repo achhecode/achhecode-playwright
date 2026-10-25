@@ -1,42 +1,43 @@
+
 package com.achhecode.playwright.browser;
 
-import com.achhecode.playwright.config.PlaywrightAttachProperties;
-import com.microsoft.playwright.Browser;
-import com.microsoft.playwright.BrowserContext;
-import com.microsoft.playwright.CDPSession;
-import com.microsoft.playwright.BrowserType;
-import com.microsoft.playwright.Playwright;
-import com.microsoft.playwright.PlaywrightException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-/**
- * Owns the Playwright driver, the CDP connection and the browser context.
- * Attaches to an externally started Chrome and NEVER closes it. Lazily
- * (re)connects, so the app can start before Chrome does.
- */
+import com.achhecode.playwright.config.PlaywrightBrowserProperties;
+import com.achhecode.playwright.config.PlaywrightBrowserProperties.Mode;
+import com.microsoft.playwright.Browser;
+import com.microsoft.playwright.BrowserContext;
+import com.microsoft.playwright.BrowserType;
+import com.microsoft.playwright.Playwright;
+import com.microsoft.playwright.PlaywrightException;
+
 @Component
 public class PlaywrightManager {
 
     private static final Logger log = LoggerFactory.getLogger(PlaywrightManager.class);
 
-    private final PlaywrightAttachProperties properties;
+    private final PlaywrightBrowserProperties properties;
     private final PlaywrightExecutor executor;
-    private final ChromeProcessManager chrome;
 
-    // Only touched on the playwright worker thread.
+    // Accessed only on the Playwright executor thread.
     private Playwright playwright;
     private Browser browser;
     private BrowserContext context;
+    private boolean ownsBrowser;
 
-    public PlaywrightManager(PlaywrightAttachProperties properties, PlaywrightExecutor executor,
-            ChromeProcessManager chrome) {
+    public PlaywrightManager(
+            PlaywrightBrowserProperties properties,
+            PlaywrightExecutor executor) {
         this.properties = properties;
         this.executor = executor;
-        this.chrome = chrome;
     }
 
     @PostConstruct
@@ -44,14 +45,18 @@ public class PlaywrightManager {
         if (!properties.isEagerConnect()) {
             return;
         }
+
         try {
             getContext();
         } catch (RuntimeException e) {
-            log.warn("Chrome not reachable at startup ({}). Will retry on first use.", e.getMessage());
+            log.warn(
+                    "Browser unavailable at startup ({}). "
+                            + "Will retry on first use.",
+                    e.getMessage());
         }
     }
 
-    /** Returns a live context, reconnecting to Chrome if necessary. */
+    /** Returns a usable browser context, creating or reconnecting as needed. */
     public BrowserContext getContext() {
         return executor.call(this::resolveContext);
     }
@@ -67,101 +72,147 @@ public class PlaywrightManager {
         return executor.call(this::isBrowserConnected);
     }
 
-    /** Forces a fresh CDP connection (e.g. after Chrome was restarted). */
+    /**
+     * Recreates the Playwright connection.
+     * ATTACHED mode reconnects without closing the external browser.
+     */
     public BrowserContext reconnect() {
         return executor.call(() -> {
-            connect();
-            return context;
+            releaseCurrentConnection();
+            return resolveContext();
         });
     }
 
     /**
-     * Hard restart: closes the whole Chrome (all tabs/windows), launches a fresh
-     * Chrome with remote debugging, and re-attaches. Requires
-     * playwright.attach.chrome-path and a local Chrome.
+     * Restarts a browser owned by this library.
+     * ATTACHED mode cannot restart the externally owned browser.
      */
     public BrowserContext restartBrowser() {
         return executor.call(() -> {
-            chrome.requireRestartable(); // validate before closing anything
-            ensurePlaywright();
-            log.info("Restarting Chrome...");
-
-            if (chrome.isDebugPortOpen()) {
-                try {
-                    if (!isBrowserConnected()) {
-                        connect();
-                    }
-                    closeChromeViaCdp();
-                } catch (RuntimeException e) {
-                    log.warn("Graceful close failed: {}", e.getMessage());
-                }
-                browser = null;
-                context = null;
-                chrome.waitForPort(false, properties.getStartupTimeoutMs());
+            if (properties.getMode() == Mode.ATTACHED) {
+                throw new IllegalStateException(
+                        "Restart is not supported in ATTACHED mode. "
+                                + "Restart the external browser separately, "
+                                + "then call reconnect().");
             }
 
-            browser = null;
-            context = null;
-            chrome.launch();
-            chrome.waitForPort(true, properties.getStartupTimeoutMs());
-            connect();
-            return context;
+            log.info("Restarting managed browser...");
+
+            releaseCurrentConnection();
+
+            return resolveContext();
         });
     }
-
-    private void closeChromeViaCdp() {
-        try {
-            CDPSession session = browser.newBrowserCDPSession();
-            session.send("Browser.close");
-        } catch (PlaywrightException e) {
-            // Expected: the connection drops as Chrome exits.
-        }
-    }
-
-    // ---------------------------------------------------------------- internals
 
     private BrowserContext resolveContext() {
         ensurePlaywright();
 
         if (!isBrowserConnected()) {
+            browser = null;
+            context = null;
+            ownsBrowser = false;
+
             connect();
             return context;
         }
+
         if (!isContextUsable(context)) {
-            context = findUsableContext();
+            if (properties.getMode() == Mode.ATTACHED) {
+                context = findUsableContext();
+            } else {
+                context = browser.newContext();
+                applyTimeouts(context);
+            }
         }
+
         return context;
     }
 
     private void connect() {
         ensurePlaywright();
-        browser = null;
-        context = null; // discard stale refs; never close the external Chrome
 
-        String endpoint = properties.endpoint();
-        log.info("Connecting to Chrome over CDP: {}", endpoint);
-
-        try {
-            browser = playwright.chromium().connectOverCDP(endpoint,
-                    new BrowserType.ConnectOverCDPOptions().setTimeout(properties.getConnectTimeoutMs()));
-        } catch (PlaywrightException e) {
-            throw new IllegalStateException("Cannot connect to Chrome at " + endpoint
-                    + ". Start it with --remote-debugging-port=" + properties.getPort(), e);
+        switch (properties.getMode()) {
+            case HEADLESS, LAUNCH -> launchBrowser();
+            case ATTACHED -> attachToBrowser();
         }
 
+        applyTimeouts(context);
+
+        log.info(
+                "Browser ready in {} mode with {} tab(s).",
+                properties.getMode(),
+                context.pages().size());
+    }
+
+    private void launchBrowser() {
+        validateLaunchConfiguration();
+
+        BrowserType.LaunchOptions options = new BrowserType.LaunchOptions()
+                .setHeadless(
+                        properties.getMode() == Mode.HEADLESS
+                                || properties.isHeadless());
+
+        String executable = properties.getExecutablePath();
+
+        if (executable != null && !executable.isBlank()) {
+            options.setExecutablePath(Path.of(executable));
+        }
+
+        options.setArgs(properties.getArgs());
+
+        browser = playwright.chromium().launch(options);
+        ownsBrowser = true;
+
+        // A new, isolated context managed by this library.
+        context = browser.newContext();
+    }
+
+    private void attachToBrowser() {
+        String endpoint = properties.endpoint();
+
+        log.info("Attaching to browser over CDP: {}", endpoint);
+
+        browser = playwright.chromium().connectOverCDP(
+                endpoint,
+                new BrowserType.ConnectOverCDPOptions()
+                        .setTimeout(properties.getConnectTimeoutMs()));
+
+        ownsBrowser = false;
         context = findUsableContext();
-        log.info("Connected to Chrome ({} tab(s)).", context.pages().size());
+    }
+
+    private void validateLaunchConfiguration() {
+        String executable = properties.getExecutablePath();
+
+        if (executable != null && !executable.isBlank()
+                && !Files.isExecutable(Path.of(executable))) {
+            throw new IllegalStateException(
+                    "Browser executable does not exist or is not executable: "
+                            + executable);
+        }
+
+        if (properties.getArgs() == null) {
+            throw new IllegalStateException(
+                    "playwright.browser.args must not be null.");
+        }
     }
 
     private BrowserContext findUsableContext() {
         for (BrowserContext candidate : browser.contexts()) {
             if (isContextUsable(candidate)) {
-                candidate.setDefaultTimeout(properties.getDefaultTimeoutMs());
-                candidate.setDefaultNavigationTimeout(properties.getNavigationTimeoutMs());
+                applyTimeouts(candidate);
                 return candidate;
             }
         }
-        throw new IllegalStateException("Connected to Chrome, but no usable browser context exists.");
+
+        throw new IllegalStateException(
+                "Connected to browser, but no usable browser context exists.");
+    }
+
+    private void applyTimeouts(BrowserContext target) {
+        target.setDefaultTimeout(properties.getDefaultTimeoutMs());
+        target.setDefaultNavigationTimeout(
+                properties.getNavigationTimeoutMs());
     }
 
     private boolean isBrowserConnected() {
@@ -173,8 +224,10 @@ public class PlaywrightManager {
     }
 
     private boolean isContextUsable(BrowserContext candidate) {
-        if (candidate == null)
+        if (candidate == null) {
             return false;
+        }
+
         try {
             candidate.pages();
             return true;
@@ -189,24 +242,45 @@ public class PlaywrightManager {
         }
     }
 
+    /**
+     * Closes only a browser launched by this library.
+     * Closing Playwright drops an attached CDP connection without
+     * explicitly closing the externally managed browser.
+     */
+    private void releaseCurrentConnection() {
+        if (ownsBrowser && browser != null) {
+            try {
+                browser.close();
+            } catch (Exception e) {
+                log.warn("Error closing managed browser: {}", e.getMessage());
+            }
+        }
+
+        browser = null;
+        context = null;
+        ownsBrowser = false;
+
+        if (playwright != null) {
+            try {
+                playwright.close();
+            } catch (Exception e) {
+                log.warn(
+                        "Error closing Playwright connection: {}",
+                        e.getMessage());
+            }
+
+            playwright = null;
+        }
+    }
+
     @PreDestroy
     void shutdown() {
-        log.info("Detaching from Chrome...");
+        log.info("Shutting down Playwright manager...");
+
         try {
-            executor.run(() -> {
-                browser = null;
-                context = null;
-                if (playwright != null) {
-                    try {
-                        playwright.close(); // drops the CDP connection only
-                    } catch (Exception e) {
-                        log.warn("Error closing Playwright: {}", e.getMessage());
-                    }
-                    playwright = null;
-                }
-            });
+            executor.run(this::releaseCurrentConnection);
         } catch (RuntimeException e) {
-            log.warn("Shutdown interrupted: {}", e.getMessage());
+            log.warn("Browser shutdown interrupted: {}", e.getMessage());
         }
     }
 }
