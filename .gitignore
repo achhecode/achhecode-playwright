@@ -30,3 +30,6 @@ build/
 !**/src/test/**/build/
 
 logs/
+
+
+**/.DS_Store
