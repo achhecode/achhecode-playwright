@@ -247,29 +247,39 @@ public class PlaywrightManager {
      * Closing Playwright drops an attached CDP connection without
      * explicitly closing the externally managed browser.
      */
-    private void releaseCurrentConnection() {
-        if (ownsBrowser && browser != null) {
-            try {
-                browser.close();
-            } catch (Exception e) {
-                log.warn("Error closing managed browser: {}", e.getMessage());
-            }
-        }
 
+    private void releaseCurrentConnection() {
+        Browser currentBrowser = browser;
+        Playwright currentPlaywright = playwright;
+        boolean shouldCloseBrowser = ownsBrowser;
+
+        // Clear state first so subsequent calls don't reuse stale references.
         browser = null;
         context = null;
         ownsBrowser = false;
+        playwright = null;
 
-        if (playwright != null) {
+        if (shouldCloseBrowser && currentBrowser != null) {
             try {
-                playwright.close();
+                if (currentBrowser.isConnected()) {
+                    currentBrowser.close();
+                }
             } catch (Exception e) {
-                log.warn(
-                        "Error closing Playwright connection: {}",
+                log.debug(
+                        "Browser was already closed or the Playwright driver "
+                                + "is unavailable: {}",
                         e.getMessage());
             }
+        }
 
-            playwright = null;
+        if (currentPlaywright != null) {
+            try {
+                currentPlaywright.close();
+            } catch (Exception e) {
+                log.debug(
+                        "Playwright driver was already closed: {}",
+                        e.getMessage());
+            }
         }
     }
 
