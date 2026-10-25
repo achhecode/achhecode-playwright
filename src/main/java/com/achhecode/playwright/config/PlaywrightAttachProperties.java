@@ -1,9 +1,9 @@
 package com.achhecode.playwright.config;
 
-import org.springframework.boot.context.properties.ConfigurationProperties;
-
 import java.util.ArrayList;
 import java.util.List;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
  * Enable with @ConfigurationPropertiesScan on your main class

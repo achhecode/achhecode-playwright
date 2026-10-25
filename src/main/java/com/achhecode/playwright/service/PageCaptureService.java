@@ -1,14 +1,14 @@
 package com.achhecode.playwright.service;
 
+import java.io.IOException;
+import java.nio.file.Path;
+
 import org.springframework.stereotype.Service;
 
 import com.achhecode.playwright.capture.BrowserPageCapture;
 import com.achhecode.playwright.capture.CaptureStorage;
 import com.achhecode.playwright.capture.PageCaptureResult;
 import com.achhecode.playwright.exception.PageCaptureException;
-
-import java.io.IOException;
-import java.nio.file.Path;
 
 @Service
 public class PageCaptureService {

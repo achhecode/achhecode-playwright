@@ -1,0 +1,90 @@
+{
+    // Java runtime
+    "java.configuration.updateBuildConfiguration": "interactive",
+    "java.configuration.runtimes": [
+        {
+            "name": "JavaSE-26",
+            "path": "/Library/Java/JavaVirtualMachines/jdk-26.jdk/Contents/Home",
+            "default": true
+        }
+    ],
+    "java.compile.nullAnalysis.mode": "automatic",
+    "java.errors.incompleteClasspath.severity": "warning",
+
+    // Java formatting
+    "[java]": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "redhat.java",
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit"
+        }
+    },
+
+    // Java imports
+    "java.completion.importOrder": [
+        "java",
+        "javax",
+        "jakarta",
+        "org",
+        "com"
+    ],
+    "java.sources.organizeImports.starThreshold": 99,
+    "java.sources.organizeImports.staticStarThreshold": 99,
+    "java.inlayHints.parameterNames.enabled": "literals",
+
+    // Spring Boot / Maven
+    "java.import.maven.enabled": true,
+    "maven.executable.preferMavenWrapper": true,
+    "maven.terminal.useJavaHome": true,
+
+    // Java debugging
+    "java.debug.settings.showQualifiedNames": true,
+    "java.debug.settings.showStaticVariables": true,
+
+    // Java testing
+    "java.test.defaultConfig": "default",
+
+    // General editor
+    "editor.minimap.enabled": false,
+    "editor.rulers": [100],
+    "editor.renderWhitespace": "selection",
+    "editor.bracketPairColorization.enabled": true,
+    "editor.guides.bracketPairs": "active",
+    "editor.suggestSelection": "first",
+    "editor.tabCompletion": "on",
+
+    // Files
+    "files.trimTrailingWhitespace": true,
+    "files.insertFinalNewline": true,
+    "files.encoding": "utf8",
+
+    // XML: Maven pom.xml
+    "[xml]": {
+        "editor.formatOnSave": true,
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true
+    },
+
+    // YAML: application.yml
+    "[yaml]": {
+        "editor.tabSize": 2,
+        "editor.insertSpaces": true
+    },
+
+    // JSON: application.json and configuration files
+    "[json]": {
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true
+    },
+
+    // XML editor
+    "workbench.editorAssociations": {
+        "*.xml": "default"
+    },
+
+    // Terminal
+    "terminal.integrated.defaultProfile.osx": "zsh",
+    "terminal.integrated.scrollback": 10000
+}
