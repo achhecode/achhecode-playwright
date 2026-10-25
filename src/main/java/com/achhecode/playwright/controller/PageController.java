@@ -13,11 +13,18 @@ import lombok.RequiredArgsConstructor;
 @RequestMapping("/api/page")
 @RequiredArgsConstructor
 public class PageController {
+
     private final PageCaptureService pageCaptureService;
 
     @PostMapping("/capture")
     public ResponseEntity<String> capture() {
-        pageCaptureService.captureCurrentPage();
+
+        var result = pageCaptureService.captureCurrentPage();
+
+        if (result.isEmpty()) {
+            return ResponseEntity.ok("No browser page is open yet. Capture skipped.");
+        }
+
         return ResponseEntity.ok("Page captured successfully!");
     }
 }
